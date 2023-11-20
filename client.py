@@ -1,7 +1,8 @@
 import json
 import socket
 
-SIZE = 1024
+BUFFER_SIZE = 1024
+LENGTH_PREFIX_SIZE = 4
 
 class RPCClient:
     def __init__(self, host:str='localhost', port:int=8080) -> None:
@@ -24,9 +25,28 @@ class RPCClient:
         except:
             pass
 
+    def receive_message(self):
+        # Receive the length prefix (4 bytes) indicating the message size
+        length_prefix = self.__sock.recv(LENGTH_PREFIX_SIZE)
+        if not length_prefix:
+            return None  # Connection closed by the server
+
+        # Unpack the length prefix to determine the message size
+        message_size = int.from_bytes(length_prefix, byteorder='big')
+
+        # Receive the complete message based on the determined size
+        received_message = b''
+        while len(received_message) < message_size:
+            chunk = self.__sock.recv(min(message_size - len(received_message), BUFFER_SIZE))
+            if not chunk:
+                return None  # Connection closed unexpectedly
+            received_message += chunk
+
+        return received_message
+
     # prefix the message with its length and send it to the server
     def send_message(self, message):
-        message_length = len(message).to_bytes(4, byteorder='big')
+        message_length = len(message).to_bytes(LENGTH_PREFIX_SIZE, byteorder='big')
         self.__sock.sendall(message_length + message)
 
     def send_request_with_timeout(self, request_data):
@@ -38,7 +58,11 @@ class RPCClient:
                 self.__sock.settimeout(timeout)
                 self.send_message(request_data)
 
-                response = self.__sock.recv(SIZE)
+                response = self.receive_message()
+                if response is None:
+                    print("Server closed the connection.")
+                    break
+                
                 decoded_response = json.loads(response.decode())
 
                 if not 'sequenceNumber' in decoded_response:

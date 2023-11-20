@@ -3,7 +3,8 @@ import socket
 import time
 from threading import Thread
 
-SIZE = 1024
+BUFFER_SIZE = 1024
+LENGTH_PREFIX_SIZE = 4
 
 class RPCServer:
     def __init__(self, host:str="0.0.0.0", port:int=8080) -> None:
@@ -51,12 +52,17 @@ class RPCServer:
         # Receive the complete message based on the determined size
         received_message = b''
         while len(received_message) < message_size:
-            chunk = client_socket.recv(min(message_size - len(received_message), SIZE))
+            chunk = client_socket.recv(min(message_size - len(received_message), BUFFER_SIZE))
             if not chunk:
                 return None  # Connection closed unexpectedly
             received_message += chunk
 
         return received_message
+    
+    # prefix the message with its length and send it to the client
+    def send_message(self, client_socket, message):
+        message_length = len(message).to_bytes(4, byteorder='big')
+        client_socket.sendall(message_length + message)
         
     def __handle__(self, client: socket.socket, address: tuple) -> None:
         print(f'Managing requests from {address}.')
@@ -94,24 +100,22 @@ class RPCServer:
                     if method_name == 'get_available_methods':
                         method_list = getattr(self, method_name)()
                         response = self.build_response(sequence_number, method_list)
-                        client.sendall(response)
+                        self.send_message(client, response)
 
                     else:
-                        client.sendall(self.build_error_response(sequence_number, f'Method {method_name} is not registered'))
+                        response = self.build_error_response(sequence_number, f'Method {method_name} is not registered')
+                        self.send_message(client, response)
                     continue
 
                 response = self.build_response(sequence_number, self._methods[method_name](*args, **kwargs))
-                client.sendall(response)
+                self.send_message(client, response)
 
             except json.JSONDecodeError:
-                # Inform client about invalid JSON format
-                client.sendall(self.build_error_response(sequence_number, 'Invalid JSON format'))
+                self.send_message(client, self.build_error_response(sequence_number, 'Invalid JSON format'))
             except ValueError as e:
-                # Inform client about incorrect JSON data format
-                client.sendall(self.build_error_response(sequence_number, str(e)))
+                self.send_message(client, self.build_error_response(sequence_number, str(e)))
             except Exception as e:
-                # Inform client about other exceptions during method execution
-                client.sendall(self.build_error_response(sequence_number, str(e)))
+                self.send_message(client, self.build_error_response(sequence_number, str(e)))
 
         print(f'Completed requests from {address}.')
         client.close()
