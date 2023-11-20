@@ -2,7 +2,7 @@ import json
 import socket
 
 BUFFER_SIZE = 1024
-LENGTH_PREFIX_SIZE = 4
+LENGTH_PREFIX_SIZE = 10
 
 class RPCClient:
     def __init__(self, host:str='localhost', port:int=8080) -> None:
@@ -25,21 +25,21 @@ class RPCClient:
         except:
             pass
 
+    # deal with length prefix and break large messages into chunks of BUFFER_SIZE bytes maximum
     def receive_message(self):
-        # Receive the length prefix (4 bytes) indicating the message size
         length_prefix = self.__sock.recv(LENGTH_PREFIX_SIZE)
         if not length_prefix:
-            return None  # Connection closed by the server
+            return None
 
-        # Unpack the length prefix to determine the message size
+        # unpack the length prefix to determine the message size
         message_size = int.from_bytes(length_prefix, byteorder='big')
 
-        # Receive the complete message based on the determined size
+        # receive the complete message based on the determined size
         received_message = b''
         while len(received_message) < message_size:
             chunk = self.__sock.recv(min(message_size - len(received_message), BUFFER_SIZE))
             if not chunk:
-                return None  # Connection closed unexpectedly
+                return None  # connection closed unexpectedly while reading data
             received_message += chunk
 
         return received_message
@@ -62,19 +62,21 @@ class RPCClient:
                 if response is None:
                     print("Server closed the connection.")
                     break
-                
+
                 decoded_response = json.loads(response.decode())
 
-                if not 'sequenceNumber' in decoded_response:
+                if 'sequenceNumber' not in decoded_response or ('result' not in decoded_response and 'error' not in decoded_response):
                     raise Exception('JSON format is not accepted by the protocol')
                 
                 if decoded_response['sequenceNumber'] != self.__seq - 1:
                     raise ValueError('Response sequence number is different from request')
 
+                if 'result' in decoded_response:
+                    return decoded_response
+                
                 if 'error' in decoded_response:
                     raise Exception(decoded_response['error'])
 
-                return decoded_response
             except socket.timeout:
                 print("Request timed out. Retrying...")
                 attempts -= 1
@@ -90,6 +92,7 @@ class RPCClient:
 
         raise Exception("Failed after multiple attempts")
     
+    # build the message based on the protocol standards
     def build_request_data(self, method_name, args, kwargs):
         request_data = {
             "sequenceNumber": self.__seq,
@@ -101,11 +104,13 @@ class RPCClient:
 
         return json.dumps(request_data).encode()
     
+    # request to the server the list of available remote methods
     def get_available_methods(self):
         request_data = self.build_request_data('get_available_methods', [], {})
         response = self.send_request_with_timeout(request_data)
         return response['result']
     
+    # encapsulate function signature to call the corresponding remote function
     def __create_stub_function(self, method_name):
         def stub(*args, **kwargs):
             request_data = self.build_request_data(method_name, args, kwargs)
@@ -114,6 +119,7 @@ class RPCClient:
 
         return stub
 
+    # create all stub functions based on the list provided by the server
     def create_stub_functions(self, available_methods):
         for method_name in available_methods:
             setattr(self, method_name, self.__create_stub_function(method_name))

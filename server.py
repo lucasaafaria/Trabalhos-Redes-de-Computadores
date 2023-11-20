@@ -4,10 +4,10 @@ import time
 from threading import Thread
 
 BUFFER_SIZE = 1024
-LENGTH_PREFIX_SIZE = 4
+LENGTH_PREFIX_SIZE = 10
 
 class RPCServer:
-    def __init__(self, host:str="0.0.0.0", port:int=8080) -> None:
+    def __init__(self, host:str="0.0.0.0", port:int=8080):
         self.host = host
         self.port = port
         self.address = (host, port)
@@ -15,7 +15,7 @@ class RPCServer:
         self.client_sequence_numbers = {}
 
     # add a method to the list of available methods
-    def register_method(self, function) -> None:
+    def register_method(self, function):
         try:
             self._methods.update({function.__name__ : function})
             print("Successfully registered method: ", function.__name__)
@@ -40,41 +40,39 @@ class RPCServer:
         print('Error response built: ', json.dumps(response))
         return json.dumps(response).encode()
     
+    # deal with length prefix and break large messages into chunks of BUFFER_SIZE bytes maximum
     def receive_message(self, client_socket):
-        # Receive the length prefix (4 bytes) indicating the message size
-        length_prefix = client_socket.recv(4)
+        length_prefix = client_socket.recv(LENGTH_PREFIX_SIZE)
         if not length_prefix:
-            return None  # Connection closed by the client
+            return None
 
-        # Unpack the length prefix to determine the message size
+        # unpack the length prefix to determine the message size
         message_size = int.from_bytes(length_prefix, byteorder='big')
 
-        # Receive the complete message based on the determined size
+        # receive the complete message based on the determined size
         received_message = b''
         while len(received_message) < message_size:
             chunk = client_socket.recv(min(message_size - len(received_message), BUFFER_SIZE))
             if not chunk:
-                return None  # Connection closed unexpectedly
+                return None  # connection closed unexpectedly while reading data
             received_message += chunk
 
         return received_message
     
     # prefix the message with its length and send it to the client
     def send_message(self, client_socket, message):
-        message_length = len(message).to_bytes(4, byteorder='big')
+        message_length = len(message).to_bytes(LENGTH_PREFIX_SIZE, byteorder='big')
         client_socket.sendall(message_length + message)
         
-    def __handle__(self, client: socket.socket, address: tuple) -> None:
+    def __handle__(self, client, address):
         print(f'Managing requests from {address}.')
         while True:
             try:
-                # Receive the length-prefixed message
                 received_message = self.receive_message(client)
                 if received_message is None:
                     print(f'Client {address} disconnected.')
                     break
 
-                # Decode the received message
                 decoded_data = json.loads(received_message.decode())
 
                 if not all(key in decoded_data for key in ['sequenceNumber', 'methodName', 'args', 'kwargs']):
@@ -120,12 +118,12 @@ class RPCServer:
         print(f'Completed requests from {address}.')
         client.close()
 
-    def run(self) -> None:
+    def run(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.bind(self.address)
             sock.listen()
 
-            print(f'+ Server {self.address} running')
+            print(f'Server {self.address} running')
             while True:
                 try:
                     client, address = sock.accept()
@@ -133,7 +131,7 @@ class RPCServer:
                     Thread(target=self.__handle__, args=[client, address]).start()
 
                 except KeyboardInterrupt:
-                    print(f'- Server {self.address} interrupted')
+                    print(f'Server {self.address} interrupted')
                     break
     
     def get_available_methods(self):
