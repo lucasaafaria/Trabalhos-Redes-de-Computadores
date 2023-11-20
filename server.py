@@ -68,6 +68,8 @@ class RPCServer:
         print(f'Managing requests from {address}.')
         while True:
             try:
+                sequence_number = -1
+
                 received_message = self.receive_message(client)
                 if received_message is None:
                     print(f'Client {address} disconnected.')

@@ -68,6 +68,9 @@ class RPCClient:
                 if 'sequenceNumber' not in decoded_response or ('result' not in decoded_response and 'error' not in decoded_response):
                     raise Exception('JSON format is not accepted by the protocol')
                 
+                if decoded_response['sequenceNumber'] == -1:
+                    raise Exception('JSON format is not accepted by the protocol')
+                
                 if decoded_response['sequenceNumber'] != self.__seq - 1:
                     raise ValueError('Response sequence number is different from request')
 
@@ -134,7 +137,7 @@ if __name__ == "__main__":
 
     server.create_stub_functions(available_methods)
 
-    while True:
+    while available_methods != 'error':
         print("\nChoose a method to call (or 'exit' to quit):")
         for i, method in enumerate(available_methods, start=1):
             print(f"{i}. {method}")
@@ -149,11 +152,10 @@ if __name__ == "__main__":
             if 0 <= method_index < len(available_methods):
                 selected_method = available_methods[method_index]
 
-                # Get arguments from user input
                 args_input = input("Enter 2 arguments (comma-separated): ")
                 args = tuple(map(lambda x: int(x.strip()), args_input.split(',')))
 
-                # Call the selected method with user-provided arguments
+                # call the selected method with user-provided arguments (eg: server.add(*args))
                 print(f"Calling {selected_method}{args}...")
                 result = getattr(server, selected_method)(*args)
                 print("Result:", result)
