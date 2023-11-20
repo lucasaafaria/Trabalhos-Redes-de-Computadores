@@ -38,18 +38,38 @@ class RPCServer:
         }
         print('Error response built: ', json.dumps(response))
         return json.dumps(response).encode()
+    
+    def receive_message(self, client_socket):
+        # Receive the length prefix (4 bytes) indicating the message size
+        length_prefix = client_socket.recv(4)
+        if not length_prefix:
+            return None  # Connection closed by the client
+
+        # Unpack the length prefix to determine the message size
+        message_size = int.from_bytes(length_prefix, byteorder='big')
+
+        # Receive the complete message based on the determined size
+        received_message = b''
+        while len(received_message) < message_size:
+            chunk = client_socket.recv(min(message_size - len(received_message), SIZE))
+            if not chunk:
+                return None  # Connection closed unexpectedly
+            received_message += chunk
+
+        return received_message
         
     def __handle__(self, client: socket.socket, address: tuple) -> None:
         print(f'Managing requests from {address}.')
         while True:
             try:
-                request = client.recv(SIZE)
-                time.sleep(8)
-                if not request:
+                # Receive the length-prefixed message
+                received_message = self.receive_message(client)
+                if received_message is None:
                     print(f'Client {address} disconnected.')
                     break
 
-                decoded_data = json.loads(request.decode())
+                # Decode the received message
+                decoded_data = json.loads(received_message.decode())
 
                 if not all(key in decoded_data for key in ['sequenceNumber', 'methodName', 'args', 'kwargs']):
                     raise ValueError('JSON format is not accepted by the protocol')

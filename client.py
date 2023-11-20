@@ -24,6 +24,11 @@ class RPCClient:
         except:
             pass
 
+    # prefix the message with its length and send it to the server
+    def send_message(self, message):
+        message_length = len(message).to_bytes(4, byteorder='big')
+        self.__sock.sendall(message_length + message)
+
     def send_request_with_timeout(self, request_data):
         attempts = 3
         timeout = 5  # in seconds
@@ -31,7 +36,7 @@ class RPCClient:
         while attempts > 0:
             try:
                 self.__sock.settimeout(timeout)
-                self.__sock.sendall(request_data)
+                self.send_message(request_data)
 
                 response = self.__sock.recv(SIZE)
                 decoded_response = json.loads(response.decode())
