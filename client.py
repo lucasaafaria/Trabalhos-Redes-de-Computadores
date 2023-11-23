@@ -2,7 +2,7 @@ import json
 import socket
 
 BUFFER_SIZE = 1024
-LENGTH_PREFIX_SIZE = 10
+LENGTH_PREFIX_SIZE = 4
 
 class RPCClient:
     def __init__(self, host:str='localhost', port:int=8080) -> None:

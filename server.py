@@ -4,7 +4,7 @@ import time
 from threading import Thread
 
 BUFFER_SIZE = 1024
-LENGTH_PREFIX_SIZE = 10
+LENGTH_PREFIX_SIZE = 4
 
 class RPCServer:
     def __init__(self, host:str="0.0.0.0", port:int=8080):
@@ -99,7 +99,11 @@ class RPCServer:
                 if method_name not in self._methods:
                     if method_name == 'get_available_methods':
                         method_list = getattr(self, method_name)()
-                        response = self.build_response(sequence_number, method_list)
+                        response = {}
+                        if len(method_list) == 0:
+                            response = self.build_error_response(sequence_number, 'There are no remote functions registered')
+                        else:
+                            response = self.build_response(sequence_number, method_list)
                         self.send_message(client, response)
 
                     else:
