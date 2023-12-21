@@ -71,6 +71,7 @@ class RPCServer:
                 sequence_number = -1
 
                 received_message = self.receive_message(client)
+                time.sleep(8)
                 if received_message is None:
                     print(f'Client {address} disconnected.')
                     break
@@ -148,6 +149,7 @@ def add(a, b):
 
 def sub(a, b):
     return a-b
+
 
 def mult(a, b):
     return a*b
